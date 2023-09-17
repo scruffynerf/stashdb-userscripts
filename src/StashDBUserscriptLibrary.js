@@ -201,6 +201,7 @@
         class StashDB extends EventTarget {
             constructor({ pageUrlCheckInterval = 50, logging = false } = {}) {
                 super();
+                this.stashBoxUrl = 'https://stashdb.org'
                 this.stashUrl = 'http://localhost:9999';
                 this.loggedIn = false;
                 this.userName = null;
@@ -243,35 +244,59 @@
                             "Content-Type": "application/json"
                         },
                         onload: response => {
-                            resolve(JSON.parse(response.response));
+                            if (response.status === 200){
+                                try{
+                                    resolve(JSON.parse(response.response));
+                                } catch (err){
+                                    console.error(err)
+                                    console.error(response)
+                                    reject
+                                }
+                            }else{
+                                console.error(response)
+                                console.error(JSON.parse(response.response).errors)
+                                reject
+                            }
                         },
                         onerror: reject
                     });
                 });
             }
             async callStashDbGQL(reqData) {
-                const options = {
-                    method: 'POST',
-                    body: JSON.stringify(reqData),
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }
-
-                try {
-                    const res = await unsafeWindow.fetch('/graphql', options);
-                    this.log.debug(res);
-                    return res.json();
-                }
-                catch (err) {
-                    console.error(err);
-                }
+                return new Promise((resolve, reject) => {
+                    GM.xmlHttpRequest({
+                        method: "POST",
+                        url: this.stashBoxUrl + '/graphql',
+                        data: JSON.stringify(reqData),
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        onload: response => {
+                            if (response.status === 200){
+                                try{
+                                    resolve(JSON.parse(response.response));
+                                } catch (err){
+                                    console.error(err)
+                                    console.error(response)
+                                    reject
+                                }
+                            }else{
+                                console.error(response)
+                                console.error(JSON.parse(response.response).errors)
+                                reject
+                            }
+                        },
+                        onerror: reject
+                    });
+                });
             }
-            async findSceneByStashId(id) {
+
+            async findStashScene( variables ) {
                 const reqData = {
-                    "variables": { id },
-                    "query": `query FindSceneByStashId($id: String!) {
-                        findScenes(scene_filter: {stash_id: {value: $id, modifier: EQUALS}}) {
+                    "variables": variables,
+                    "query": `query FindSceneByStashId($scene_filter: SceneFilterType) {
+                        findScenes(scene_filter: $scene_filter) {
+                            count
                             scenes {
                                 title
                                 stash_ids {
@@ -285,11 +310,12 @@
                 }
                 return this.callGQL(reqData);
             }
-            async findStudioByStashId(id) {
+            async findStashStudio(variables) {
                 const reqData = {
-                    "variables": { id },
-                    "query": `query FindStudioByStashId($id: String!) {
-                        findStudios(studio_filter: {stash_id: {value: $id, modifier: EQUALS}}) {
+                    "variables": variables,
+                    "query": `query FindStudioByStashId($studio_filter: StudioFilterType) {
+                        findStudios(studio_filter: $studio_filter) {
+                            count
                             studios {
                                 stash_ids {
                                     endpoint
@@ -302,16 +328,9 @@
                 }
                 return this.callGQL(reqData);
             }
-            async findPerformerByStashId(id) {
+            async findStashPerformer(variables) {
                 const reqData = {
-                    "variables": {
-                        "performer_filter": {
-                            "stash_id": {
-                                "value": id,
-                                "modifier": "EQUALS"
-                            }
-                        }
-                    },
+                    "variables": variables,
                     "query": `query FindPerformers($filter: FindFilterType, $performer_filter: PerformerFilterType) {
                         findPerformers(filter: $filter, performer_filter: $performer_filter) {
                             count
@@ -323,28 +342,101 @@
                 }
                 return this.callGQL(reqData);
             }
+
+            async getSceneByStashId(id){
+                if (!id) return;
+                const resp = await this.findStashScene({
+                    "scene_filter": {
+                        "stash_id": {
+                            "value": id,
+                            "modifier": "EQUALS"
+                        }
+                    }
+                })
+                if (resp?.data?.findScenes?.count === 1){
+                    return resp?.data?.findScenes?.scenes[0]
+                }
+            }
+            async getStudioByStashId(id) {
+                if (!id) return;
+                const resp = await this.findStashStudio({
+                    "studio_filter": {
+                        "stash_id": {
+                            "value": id,
+                            "modifier": "EQUALS"
+                        }
+                    }
+                })
+                if (resp?.data?.findStudios?.count === 1){
+                    return resp?.data?.findStudios?.studios[0]
+                }
+            }
+            async getPerformerByStashId(id){
+                if (!id) return;
+                const resp = await this.findStashPerformer({
+                    "performer_filter": {
+                        "stash_id": {
+                            "value": id,
+                            "modifier": "EQUALS"
+                        }
+                    }
+                })
+                if (resp?.data?.findPerformers?.count === 1){
+                    return resp?.data?.findPerformers?.performers[0]
+                }
+            }
+
+            async createStashPlaceholderScene(stashId=null, data=null) {
+                if (!data && !stashId) return
+                if (!data){
+                    data = (await this.findStashboxSceneByStashId(stashId))?.data?.findScene;
+                }
+                let createInput = {}
+                createInput.stash_ids = [{"stash_id":data?.id, "endpoint": `${this.stashBoxUrl}/graphql`}]
+                createInput.code = data.code
+                createInput.title = data.title
+                createInput.date = data.release_date
+                createInput.cover_image = data.images[0]?.url
+                createInput.studio_id = (await this.getStudioByStashId(data?.studio?.id))?.id
+                createInput.urls = data.urls.map(u=>u.url)
+                createInput.details = data.details
+                createInput.performer_ids = []
+                for (const p of data.performers){
+                    let local_performer = await this.getPerformerByStashId(p.performer.id);
+                    if (local_performer) { createInput.performer_ids.push( local_performer.id ) }
+                }
+
+                console.log(createInput)
+
+                const reqData = {
+                    "variables": { "input": createInput },
+                    "query": `mutation SceneCrate($input: SceneCreateInput!) {
+                        sceneCreate(input: $input) {
+                            id
+                        }
+                    }`
+                }
+                return this.callGQL(reqData);
+            }
             /*async processScenes(data) {
                 if (data?.data?.queryScenes?.scenes) {
                     return Promise.all(data?.data?.queryScenes?.scenes.map(scene => this.processListScene(scene.id)));
                 }
             }*/
             async processListScene(stashId, sceneEl) {
-                const data = await this.findSceneByStashId(stashId);
-                const localId = data?.data?.findScenes?.scenes[0]?.id;
+                const localId = (await this.getSceneByStashId(stashId))?.id;
                 waitForElementByXpath(`//div[@class='card-footer']//a[contains(@href,'${stashId}')]`, async (xpath, el) => {
                     await this.addSceneMarker(stashId, localId, el.parentElement, sceneEl);
                 });
             }
             async processPageScene(stashId) {
-                const data = await this.findSceneByStashId(stashId);
-                const localId = data?.data?.findScenes?.scenes[0]?.id;
+                const localId = (await this.getSceneByStashId(stashId))?.id;
                 waitForElementByXpath(`//div[contains(@class,'scene-info')]/div[@class='card-header']/div[@class='float-end']`, async (xpath, el) => {
                     await this.addSceneMarker(stashId, localId, el, getClosestAncestor(el, '.scene-info'));
                 });
             }
             async processSearchScene(stashId, sceneEl) {
-                const data = await this.findSceneByStashId(stashId);
-                const localId = data?.data?.findScenes?.scenes[0]?.id;
+                const localId = (await this.getSceneByStashId(stashId))?.id;
                 waitForElementByXpath(`//a[contains(@href,'${stashId}')]//h5`, async (xpath, el) => {
                     el.classList.add('d-flex');
                     const markerEl = await this.addSceneMarker(stashId, localId, el, sceneEl);
@@ -449,6 +541,7 @@
                                 menuEl.remove();
                                 if (!sceneState.data) {
                                     const data = (await this.findStashboxSceneByStashId(stashId))?.data?.findScene;
+                                    await this.createStashPlaceholderScene(null, data)
                                     const { title = '', release_date = '', duration } = data;
                                     const studioName = data?.studio?.name || '';
                                     const studioId = data?.studio?.id || '';
@@ -601,23 +694,20 @@
                     const url = new URL(anchor.href);
                     if (url.pathname.startsWith('/scenes/')) {
                         const stashId = url.pathname.replace('/scenes/', '');
-                        this.findSceneByStashId(stashId).then(data => {
-                            const localId = data?.data?.findScenes?.scenes[0]?.id;
-                            this.addStashLink(anchor, localId, 'scenes');
+                        this.getSceneByStashId(stashId).then(scene => {
+                            this.addStashLink(anchor, scene?.id, 'scenes');
                         });
                     }
                     else if (url.pathname.startsWith('/performers/')) {
                         const stashId = url.pathname.replace('/performers/', '');
-                        this.findPerformerByStashId(stashId).then(data => {
-                            const localId = data?.data?.findPerformers?.performers[0]?.id;
-                            this.addStashLink(anchor, localId, 'performers');
+                        this.getPerformerByStashId(stashId).then(performer => {
+                            this.addStashLink(anchor, performer?.id, 'performers');
                         });
                     }
                     else if (url.pathname.startsWith('/studios/')) {
                         const stashId = url.pathname.replace('/studios/', '');
-                        this.findStudioByStashId(stashId).then(data => {
-                            const localId = data?.data?.findStudios?.studios[0]?.id;
-                            this.addStashLink(anchor, localId, 'studios');
+                        this.getStudioByStashId(stashId).then(studio => {
+                            this.addStashLink(anchor, studio?.id, 'studios');
                         });
                     }
                 }
@@ -632,6 +722,7 @@
                 this.log.debug(URL, window.location);
 
                 waitForElementByXpath('//button[contains(@class, "login-button")]|//span[text()="Logged in as"]/following-sibling::a', async (xpath, el) => {
+                    this.stashBoxUrl = "https://stashdb.org"
                     this.loggedIn = el.tagName === 'A';
                     this.userName = this.loggedIn ? el.innerText : null;
 
@@ -959,10 +1050,12 @@
                     "query": `query Scene($id: ID!) {
                         findScene(id: $id) {
                             id
+                            code
                             release_date
                             title
                             deleted
                             duration
+                            urls { url }
                             images {
                                 id
                                 url
@@ -973,6 +1066,10 @@
                                 id
                                 name
                             }
+                            performers {
+                                performer { id name }
+                            }
+                            details
                         }
                     }`
                 };
