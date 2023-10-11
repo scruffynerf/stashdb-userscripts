@@ -5,7 +5,7 @@
 // @version     0.1.0
 // @author      7dJx1qP
 // @match       https://stashdb.org/*
-// @resource    IMPORTED_CSS https://raw.githubusercontent.com/7dJx1qP/stashdb-userscripts/dist/public/scene.css
+// @resource    IMPORTED_CSS https://raw.githubusercontent.com/stg-annon/stashdb-userscripts/dist/public/scene.css
 // @grant       unsafeWindow
 // @grant       GM_setClipboard
 // @grant       GM_getResourceText
