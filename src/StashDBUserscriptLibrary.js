@@ -347,7 +347,7 @@
                 if (!id) return;
                 const resp = await this.findStashScene({
                     "scene_filter": {
-                        "stash_id": {
+                        "stash_id_endpoint": {
                             "value": id,
                             "modifier": "EQUALS"
                         }
@@ -361,7 +361,7 @@
                 if (!id) return;
                 const resp = await this.findStashStudio({
                     "studio_filter": {
-                        "stash_id": {
+                        "stash_id_endpoint": {
                             "value": id,
                             "modifier": "EQUALS"
                         }
@@ -375,7 +375,7 @@
                 if (!id) return;
                 const resp = await this.findStashPerformer({
                     "performer_filter": {
-                        "stash_id": {
+                        "stash_id_endpoint": {
                             "value": id,
                             "modifier": "EQUALS"
                         }
@@ -589,7 +589,7 @@
                 const reqData = {
                     "variables": {
                         "performer_filter": {
-                            "stash_id": {
+                            "stash_id_endpoint": {
                                 "value": stashId,
                                 "modifier": "EQUALS"
                             }
