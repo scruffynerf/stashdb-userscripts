@@ -348,7 +348,7 @@
                 const resp = await this.findStashScene({
                     "scene_filter": {
                         "stash_id_endpoint": {
-                            "value": id,
+                            "stash_id": id,
                             "modifier": "EQUALS"
                         }
                     }
@@ -362,7 +362,7 @@
                 const resp = await this.findStashStudio({
                     "studio_filter": {
                         "stash_id_endpoint": {
-                            "value": id,
+                            "stash_id": id,
                             "modifier": "EQUALS"
                         }
                     }
@@ -376,7 +376,7 @@
                 const resp = await this.findStashPerformer({
                     "performer_filter": {
                         "stash_id_endpoint": {
-                            "value": id,
+                            "stash_id": id,
                             "modifier": "EQUALS"
                         }
                     }
@@ -387,10 +387,12 @@
             }
 
             async createStashPlaceholderScene(stashId=null, data=null) {
+                if (!this.createLocalScenes) return
                 if (!data && !stashId) return
                 if (!data){
                     data = (await this.findStashboxSceneByStashId(stashId))?.data?.findScene;
                 }
+                console.log(`Creating scene ${data?.id} in stash stash`)
                 let createInput = {}
                 createInput.stash_ids = [{"stash_id":data?.id, "endpoint": `${this.stashBoxUrl}/graphql`}]
                 createInput.code = data.code
@@ -590,7 +592,7 @@
                     "variables": {
                         "performer_filter": {
                             "stash_id_endpoint": {
-                                "value": stashId,
+                                "stash_id": stashId,
                                 "modifier": "EQUALS"
                             }
                         }
@@ -744,6 +746,13 @@
                                     <input id="apiKey" class="input" type="text" placeholder="Stash API Key if using Authentication" value="">
                                 </div>
                             </div>
+
+                            <div class="field">
+                                <label class="label">Create Scenes in Local Stash?</label>
+                                <div class="control">
+                                    <input id="createLocalScenes" type="checkbox" role="switch">
+                                </div>
+                            </div>
                         </div>`);
                         settingsEl.appendChild(settingsMenuEl);
 
@@ -758,6 +767,13 @@
 
                         settingsMenuEl.addEventListener('click', evt => {
                             evt.stopPropagation();
+                        });
+
+                        this.createLocalScenes = await GM.getValue('createLocalScenes', false);
+                        const localSceneChkBx = document.getElementById('createLocalScenes');
+                        localSceneChkBx.checked = this.createLocalScenes;
+                        localSceneChkBx.addEventListener('change', async () => {
+                            await GM.setValue('createLocalScenes', localSceneChkBx.checked || false);
                         });
 
                         this.stashUrl = await GM.getValue('stashAddress', 'http://localhost:9999');
