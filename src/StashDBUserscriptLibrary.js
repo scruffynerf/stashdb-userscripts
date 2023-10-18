@@ -387,7 +387,7 @@
             }
 
             async createStashPlaceholderScene(stashId=null, data=null) {
-                if (!this.createLocalScenes) return
+                if ( !(await GM.getValue("createLocalScenes", false)) ) return
                 if (!data && !stashId) return
                 if (!data){
                     data = (await this.findStashboxSceneByStashId(stashId))?.data?.findScene;
@@ -749,8 +749,8 @@
 
                             <div class="field">
                                 <label class="label">Create Scenes in Local Stash?</label>
-                                <div class="control">
-                                    <input id="createLocalScenes" type="checkbox" role="switch">
+                                <div class="form-check form-switch">
+                                    <input id="createLocalScenes" class="form-check-input" type="checkbox" role="switch">
                                 </div>
                             </div>
                         </div>`);
