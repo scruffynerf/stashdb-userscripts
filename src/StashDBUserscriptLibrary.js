@@ -385,14 +385,63 @@
                     return resp?.data?.findPerformers?.performers[0]
                 }
             }
+            async createStashPerformer(stashId){
+                if ( !(await GM.getValue("createLocalPerformers", false)) ) return
+                
+                let data = (await this.findStashboxPerformerByStashId(stashId))?.data?.findPerformer;
+                if (!data) return
 
+                let performer_filter = {"name": {"value": data.name, "modifier": "EQUALS"}}
+                if (data.disambiguation){
+                    performer_filter.disambiguation = {"value": data.disambiguation, "modifier": "EQUALS"}
+                }
+                
+                let check = (await this.findStashPerformer({
+                    "filter":{"q": "", "page":1, "per_page":5},
+                    "performer_filter": performer_filter
+                }))?.data?.findPerformers
+
+                console.log(check)
+
+                if (check?.count > 1){
+                    console.warn(`Skip performer creation, found ${check?.count} other perofmers`)
+                    return 
+                }
+                
+                if (check?.count == 1){
+                    let existing = check?.performers[0]
+                    console.log(`Update existing performer ${data.name} (${existing.id})`)
+                    //update performer with stash_id
+                    return
+                }
+
+                console.log(`Creating performer ${data?.name} (${data?.id}) in local stash`)
+
+                let createInput = {}
+                createInput.name = data.name
+                createInput.disambiguation = data.disambiguation
+                createInput.alias_list = data.aliases
+                createInput.stash_ids = [{"stash_id":data?.id, "endpoint": `${this.stashBoxUrl}/graphql`}]
+                createInput.image = data.images[0].url
+
+                const reqData = {
+                    "variables": { "input": createInput },
+                    "query": `mutation PerformerCreate($input: PerformerCreateInput!) {
+                        performerCreate(input: $input) {
+                            id
+                        }
+                    }`
+                }
+                return this.callGQL(reqData);
+
+            }
             async createStashPlaceholderScene(stashId=null, data=null) {
                 if ( !(await GM.getValue("createLocalScenes", false)) ) return
                 if (!data && !stashId) return
                 if (!data){
                     data = (await this.findStashboxSceneByStashId(stashId))?.data?.findScene;
                 }
-                console.log(`Creating scene ${data?.id} in stash stash`)
+                console.log(`Creating scene ${data?.id} in local stash`)
                 let createInput = {}
                 createInput.stash_ids = [{"stash_id":data?.id, "endpoint": `${this.stashBoxUrl}/graphql`}]
                 createInput.code = data.code
@@ -642,6 +691,13 @@
                     this.createStashPerformerLink(stashId, function (performerLink) {
                         header.appendChild(performerLink);
                     });
+
+                    const favoriteBtn = document.querySelector('button.FavoriteStar')
+                    favoriteBtn.addEventListener('click', ()=>{
+                        if (favoriteBtn.querySelector("svg").getAttribute("color") == 'white'){
+                            this.createStashPerformer(stashId);
+                        }
+                    });
                 }
             }
             addStashScenePerformerLink() {
@@ -753,6 +809,13 @@
                                     <input id="createLocalScenes" class="form-check-input" type="checkbox" role="switch">
                                 </div>
                             </div>
+
+                            <div class="field">
+                                <label class="label">Create Performers in Local Stash?</label>
+                                <div class="form-check form-switch">
+                                    <input id="createLocalPerformers" class="form-check-input" type="checkbox" role="switch">
+                                </div>
+                            </div>
                         </div>`);
                         settingsEl.appendChild(settingsMenuEl);
 
@@ -774,6 +837,13 @@
                         localSceneChkBx.checked = this.createLocalScenes;
                         localSceneChkBx.addEventListener('change', async () => {
                             await GM.setValue('createLocalScenes', localSceneChkBx.checked || false);
+                        });
+                        
+                        this.createLocalPerformers = await GM.getValue('createLocalPerformers', false);
+                        const localPerformerChkBx = document.getElementById('createLocalPerformers');
+                        localPerformerChkBx.checked = this.createLocalPerformers;
+                        localPerformerChkBx.addEventListener('change', async () => {
+                            await GM.setValue('createLocalPerformers', localPerformerChkBx.checked || false);
                         });
 
                         this.stashUrl = await GM.getValue('stashAddress', 'http://localhost:9999');
@@ -1086,6 +1156,24 @@
                                 performer { id name }
                             }
                             details
+                        }
+                    }`
+                };
+                return this.callStashDbGQL(reqData);
+            }
+            async findStashboxPerformerByStashId(stashId) {
+                const reqData = {
+                    "operationName": "Performer",
+                    "variables": {
+                        "id": stashId
+                    },
+                    "query": `query Performer($id: ID!) {
+                        findPerformer(id: $id) {
+                            id
+                            name
+                            disambiguation
+                            aliases
+                            images { url }
                         }
                     }`
                 };
